@@ -1,9 +1,14 @@
 package binsync;
 
-import docking.ActionContext;
+import java.awt.Event;
+import javax.swing.KeyStroke;
+
 import docking.action.DockingAction;
+import docking.ActionContext;
+import docking.action.*;
 import docking.action.MenuData;
 import ghidra.app.CorePluginPackage;
+import ghidra.app.ExamplesPluginPackage;
 import ghidra.app.events.ProgramSelectionPluginEvent;
 import ghidra.app.plugin.PluginCategoryNames;
 import ghidra.app.plugin.ProgramPlugin;
@@ -17,34 +22,33 @@ import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.*;
 import ghidra.util.Msg;
-import ghidra.util.table.SelectionNavigationAction;
-import ghidra.util.table.actions.MakeProgramSelectionAction;
-import ghidra.util.task.SwingUpdateManager;
+import resources.ResourceManager;
 
 @PluginInfo(
 	status = PluginStatus.RELEASED,
-	packageName = "BinSync",
-	category = PluginCategoryNames.MISC,
+	packageName = ExamplesPluginPackage.NAME,
+	category = PluginCategoryNames.EXAMPLES,
 	shortDescription = "BinSync Starter",
-	description = "Collab",
-	servicesRequired = { GoToService.class }
+	description = "Collab"
 )
 public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener {
 	
 	private DockingAction configBinSyncAction;
 	
-	public BinSyncPlugin(PluginTool tool, boolean consumeLocationChange, boolean consumeSelectionChange) {
-		super(tool, consumeLocationChange, consumeSelectionChange);
+	public BinSyncPlugin(PluginTool tool) {
+		super(tool, true, true);
 		
-		configBinSyncAction = new DockingAction("Configure BinSync...", getName()) {
+		configBinSyncAction = new DockingAction("BinSync", getName()) {
 			@Override
 			public void actionPerformed(ActionContext context) {
-				Msg.info(this, "Configuring BinSync Now...");
+				Msg.info(this, "Configing BinSync Now!");
 			}
 		};
 		
 		configBinSyncAction.setEnabled(true);
-		configBinSyncAction.setMenuBarData(new MenuData(new String[] { "Tools", "Configure BinSync" }));
+		configBinSyncAction.setMenuBarData(new MenuData(new String[] {"Tools", "Configure BinSync..." }));
+		configBinSyncAction.setKeyBindingData(new KeyBindingData(KeyStroke.getKeyStroke('B', Event.CTRL_MASK + Event.SHIFT_MASK)));
+		configBinSyncAction.setToolBarData(new ToolBarData(ResourceManager.loadImage("images/binsync.png")));
 		tool.addAction(configBinSyncAction);
 	}
 	
@@ -58,33 +62,73 @@ public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener
 		super.dispose();
 	}
 	
+	@Override
+	protected void programActivated(Program program) {
+		program.addListener(this);
+	}
+
+	@Override
+	protected void programDeactivated(Program program) {
+		program.removeListener(this);
+	}
+	
 	/*
 	 * Change Event Handler
 	 */
 	
+	
 	@Override
 	public void domainObjectChanged(DomainObjectChangedEvent ev) {
-		if (ev.containsEvent(DomainObject.DO_OBJECT_RESTORED) ||
-			ev.containsEvent(ChangeManager.DOCR_CODE_REMOVED)) {
+		int[] program_undo_redo_events = new int[] {
+			DomainObject.DO_OBJECT_RESTORED, 
+			ChangeManager.DOCR_CODE_REMOVED
+		};
+		
+		int[] cmt_events = new int[] {
+			ChangeManager.DOCR_PRE_COMMENT_CHANGED,
+			ChangeManager.DOCR_POST_COMMENT_CHANGED,
+			ChangeManager.DOCR_EOL_COMMENT_CHANGED,
+			ChangeManager.DOCR_PLATE_COMMENT_CHANGED,
+			ChangeManager.DOCR_REPEATABLE_COMMENT_CHANGED,
+			ChangeManager.DOCR_REPEATABLE_COMMENT_REMOVED,
+			ChangeManager.DOCR_REPEATABLE_COMMENT_CREATED,
+			ChangeManager.DOCR_REPEATABLE_COMMENT_ADDED,
+			ChangeManager.DOCR_REPEATABLE_COMMENT_DELETED,
+		};
+		
+		int[] func_events = new int[] {
+			ChangeManager.DOCR_FUNCTION_CHANGED,
+			ChangeManager.DOCR_FUNCTION_BODY_CHANGED,
+			ChangeManager.DOCR_VARIABLE_REFERENCE_ADDED,
+			ChangeManager.DOCR_VARIABLE_REFERENCE_REMOVED
+		};
+		
+		
+		System.out.println("Change detected");
+		if (this.eventContains(ev, program_undo_redo_events))
+		{
 			// reload or undo event has happend
 			return;
 		}
 		
-
 		// check for and handle commend added, comment deleted, and comment changed events
-		if (ev.containsEvent(ChangeManager.DOCR_PRE_COMMENT_CHANGED) ||
-			ev.containsEvent(ChangeManager.DOCR_POST_COMMENT_CHANGED) ||
-			ev.containsEvent(ChangeManager.DOCR_EOL_COMMENT_CHANGED) ||
-			ev.containsEvent(ChangeManager.DOCR_PLATE_COMMENT_CHANGED) ||
-			ev.containsEvent(ChangeManager.DOCR_REPEATABLE_COMMENT_CHANGED) ||
-			ev.containsEvent(ChangeManager.DOCR_REPEATABLE_COMMENT_ADDED) ||
-			ev.containsEvent(ChangeManager.DOCR_REPEATABLE_COMMENT_REMOVED) ||
-			ev.containsEvent(ChangeManager.DOCR_REPEATABLE_COMMENT_CREATED) ||
-			ev.containsEvent(ChangeManager.DOCR_REPEATABLE_COMMENT_ADDED) ||
-			ev.containsEvent(ChangeManager.DOCR_REPEATABLE_COMMENT_DELETED)) 
+		if (this.eventContains(ev, cmt_events))
 		{
 			this.handleCmtChanged(ev);
 		}
+		else if(this.eventContains(ev, func_events))
+		{
+			System.out.println("Function changed!");
+		}
+	}
+	
+	private Boolean eventContains(DomainObjectChangedEvent ev, int[] events) {
+		for (int event: events) {
+			if (ev.containsEvent(event)) {
+				return true;
+			}
+		}
+		return false; 
 	}
 	
 	/*
