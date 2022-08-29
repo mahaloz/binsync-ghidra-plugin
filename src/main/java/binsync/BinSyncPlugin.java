@@ -1,5 +1,7 @@
 package binsync;
 
+import binsync.BSGhidraServer;
+
 import java.awt.Event;
 import javax.swing.KeyStroke;
 
@@ -34,21 +36,16 @@ import resources.ResourceManager;
 public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener {
 	
 	private DockingAction configBinSyncAction;
+	private String binSyncUIPath;
 	
 	public BinSyncPlugin(PluginTool tool) {
 		super(tool, true, true);
 		
-		configBinSyncAction = new DockingAction("BinSync", getName()) {
-			@Override
-			public void actionPerformed(ActionContext context) {
-				Msg.info(this, "Configing BinSync Now!");
-			}
-		};
+		// BinSync UI runner path
+		binSyncUIPath = "/home/mahaloz/github/binsync/plugins/ghidra_binsync/binsync_ui.py";
 		
-		configBinSyncAction.setEnabled(true);
-		configBinSyncAction.setMenuBarData(new MenuData(new String[] {"Tools", "Configure BinSync..." }));
-		configBinSyncAction.setKeyBindingData(new KeyBindingData(KeyStroke.getKeyStroke('B', Event.CTRL_MASK + Event.SHIFT_MASK)));
-		configBinSyncAction.setToolBarData(new ToolBarData(ResourceManager.loadImage("images/binsync.png")));
+		// Add a BinSync button to 'Tools' in GUI menu
+		configBinSyncAction = this.createBinSyncMenuAction();
 		tool.addAction(configBinSyncAction);
 	}
 	
@@ -70,6 +67,54 @@ public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener
 	@Override
 	protected void programDeactivated(Program program) {
 		program.removeListener(this);
+	}
+	
+	private DockingAction createBinSyncMenuAction() {
+		BinSyncPlugin plugin = this;
+		configBinSyncAction = new DockingAction("BinSync", getName()) {
+			@Override
+			public void actionPerformed(ActionContext context) {
+				plugin.configureBinSync();
+			}
+		};
+		
+		configBinSyncAction.setEnabled(true);
+		configBinSyncAction.setMenuBarData(new MenuData(new String[] {"Tools", "Configure BinSync..." }));
+		configBinSyncAction.setKeyBindingData(new KeyBindingData(KeyStroke.getKeyStroke('B', Event.CTRL_MASK + Event.SHIFT_MASK)));
+		configBinSyncAction.setToolBarData(new ToolBarData(ResourceManager.loadImage("images/binsync.png")));
+		return configBinSyncAction;
+	}
+	
+	/*
+	 * BinSync Callers
+	 */
+	
+	private Boolean startBinSyncUI() {
+		try {
+			Process process = new ProcessBuilder(
+					"python3", binSyncUIPath
+			).start();
+		}
+		catch (Exception e) {
+			Msg.info(this, "Failed to start" + e.toString());
+			return false;
+		}
+		
+		Msg.info(this, "Started UI");
+		
+		return true;
+	}
+	
+	private void configureBinSync() {
+		Msg.info(this, "Configuring BinSync...");
+		// start the BSGhidraServer
+		BSGhidraServer.run();
+		// start the Python3 UI
+		if(!startBinSyncUI())
+			return;
+		// await (10 minutes) a reply on the Ghidra Server
+		// if reply == OK	->	keep the server running in a thread
+		// if reply != OK or timeout	->	stop the server
 	}
 	
 	/*

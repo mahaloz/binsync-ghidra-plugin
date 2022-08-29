@@ -2,7 +2,6 @@
 build/
 dist/
 .gradle/
-build*
 .classpath
 .project
 

@@ -55,6 +55,7 @@ repositories {
 }
 
 dependencies {
+	//implementation 'org.apache.xmlrpc:xmlrpc:3.1.3'
 	// Any external dependencies added here will automatically be copied to the lib/ directory when
 	// this extension is built.	
 }
