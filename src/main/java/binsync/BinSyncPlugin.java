@@ -34,15 +34,18 @@ import resources.ResourceManager;
 	description = "Collab"
 )
 public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener {
-	
 	private DockingAction configBinSyncAction;
 	private String binSyncUIPath;
+	private BSGhidraServer server;
 	
 	public BinSyncPlugin(PluginTool tool) {
 		super(tool, true, true);
 		
 		// BinSync UI runner path
 		binSyncUIPath = "/home/mahaloz/github/binsync/plugins/ghidra_binsync/binsync_ui.py";
+		
+		// API Server
+		server = new BSGhidraServer(6683, this);
 		
 		// Add a BinSync button to 'Tools' in GUI menu
 		configBinSyncAction = this.createBinSyncMenuAction();
@@ -89,6 +92,37 @@ public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener
 	 * BinSync Callers
 	 */
 	
+	private Boolean awaitBinSyncUIConfiguration(int waitTimeMins) {
+		// wait a max of 5 mins from now
+		long endTime = System.currentTimeMillis() + waitTimeMins*60*1000;
+		
+		while (System.currentTimeMillis() < endTime) {
+			if(this.server.uiConfiguredCorrectly != null)
+				return this.server.uiConfiguredCorrectly;
+			
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				break;
+			}
+		} 
+		
+		return false;
+	}
+	
+	
+	private void killServerAfterWait(int waitTimeMins)
+	{
+		// await 5 minutes for a configuration before quitting
+		if(!this.awaitBinSyncUIConfiguration(waitTimeMins))
+		{
+			Msg.info(this, "bad connection");
+			this.server.stop_server();
+			return;
+		}
+		Msg.info(this, "good connection");
+	}
+	
 	private Boolean startBinSyncUI() {
 		try {
 			Process process = new ProcessBuilder(
@@ -108,13 +142,18 @@ public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener
 	private void configureBinSync() {
 		Msg.info(this, "Configuring BinSync...");
 		// start the BSGhidraServer
-		BSGhidraServer.run();
+		this.server.start_server();
+		
+		Msg.info(this, "Server started, now starting UI");
 		// start the Python3 UI
 		if(!startBinSyncUI())
 			return;
-		// await (10 minutes) a reply on the Ghidra Server
-		// if reply == OK	->	keep the server running in a thread
-		// if reply != OK or timeout	->	stop the server
+		
+		Msg.info(this, "awaiting a connection...");
+		new Thread(() -> {
+			this.killServerAfterWait(5);
+		}).start();
+		
 	}
 	
 	/*

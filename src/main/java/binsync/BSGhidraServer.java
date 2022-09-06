@@ -1,34 +1,64 @@
 package binsync;
 
+import org.apache.xmlrpc.XmlRpcException;
 import org.apache.xmlrpc.server.*;
 import org.apache.xmlrpc.webserver.WebServer;
 
-class BSGhidraServerApi {
-	public Integer sum(int x, int y){
-		return x+y;
-	}
-}
+import ghidra.Ghidra;
+
+import binsync.BinSyncPlugin;
+import binsync.BSGhidraServerAPI;
+import binsync.BSGhidraProcessorFactoryFactory;
 
 public class BSGhidraServer {
-    private static final int port = 8080;
-	public Integer sum(int x, int y){
-		return x+y;
-	}
-
-    public static void run() {
-    try
+    public BinSyncPlugin plugin;
+    public BSGhidraServerAPI api;
+    private WebServer server;
+    public Boolean uiConfiguredCorrectly;
+    
+    public int port;
+    
+    public BSGhidraServer(int port, BinSyncPlugin plugin)
     {
-    	System.out.println("Attempting to start XML-RPC Server...");
-        WebServer server = new WebServer(port);
+        this.server = new WebServer(port);
+    	this.plugin = plugin;
+    	this.uiConfiguredCorrectly = null;
+    	this.port = port;
+    	
         PropertyHandlerMapping phm = new PropertyHandlerMapping();
-        phm.addHandler("bs", BSGhidraServer.class);
-        server.getXmlRpcServer().setHandlerMapping(phm);
-        server.start();
+        api = new BSGhidraServerAPI(this);
+        phm.setRequestProcessorFactoryFactory(new BSGhidraProcessorFactoryFactory(api));
+        phm.setVoidMethodEnabled(true);
         
-        System.out.println("Started successfully.");
-        System.out.println("Accepting requests. (Halt program to stop.)");
-     } catch (Exception exception){
-          System.err.println("JavaServer: " + exception);
+        try {
+			phm.addHandler("bs", BSGhidraServerAPI.class);
+			this.server.getXmlRpcServer().setHandlerMapping(phm);
+		} catch (XmlRpcException e) {
+    		System.out.println("Error in phm config: " + e);
+			this.server = null;
+		}
+    }
+    
+    public Boolean start_server() {
+    	if(this.server == null) {
+    		System.out.println("Null server man");
+    		return false;
+    	}
+    	
+    	try {
+    		this.server.start();
+    		return true;
+    	} catch (Exception exception){
+    		System.out.println("Error starting Server: " + exception);
+    		return false;
        }
+    }
+    
+    public Boolean stop_server() {
+    	if(this.server == null)
+    		return false;
+    	
+    	this.server.shutdown();
+    	return true;
     }
 }
