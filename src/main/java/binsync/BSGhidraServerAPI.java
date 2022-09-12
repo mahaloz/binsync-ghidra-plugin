@@ -22,6 +22,7 @@ import ghidra.program.database.function.LocalVariableDB;
 import ghidra.util.data.DataTypeParser; 
 import ghidra.util.data.DataTypeParser.AllowedDataTypes; 
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
+import ghidra.util.Msg;
 
 import binsync.BSGhidraServer;
 
@@ -55,8 +56,10 @@ public class BSGhidraServerAPI {
 	 */
 	
 	private Function getNearestFunction(Address addr) {
-		if(addr == null)
+		if(addr == null) {
+			Msg.warn(this, "Failed to parse Addr string earlier, got null addr.");
 			return null;
+		}
 		
 		var program = this.server.plugin.getCurrentProgram();
 		var funcManager = program.getFunctionManager();
@@ -122,8 +125,10 @@ public class BSGhidraServerAPI {
 	public Boolean setFunctionName(String addr, String name) {
 		var program = this.server.plugin.getCurrentProgram();
 		var func = this.getNearestFunction(this.strToAddr(addr));
-		if(func == null)
+		if(func == null) {
+			Msg.warn(server, "Failed to find a function by the address " + addr);;
 			return false;
+		}
 		
 		
 		var transID = program.startTransaction("update function name");
@@ -152,24 +157,30 @@ public class BSGhidraServerAPI {
 	
 	public Boolean setStackVarType(String addr, String offset, String typeStr) {
 		var parsedType = parseTypeString(typeStr);
-		if(parsedType == null)
+		if(parsedType == null) {
+			Msg.warn(server, "Failed to parse type string!");;
 			return false;
+		}
 		
 		var program = this.server.plugin.getCurrentProgram();
 		var func = this.getNearestFunction(this.strToAddr(addr));
-		if(func == null)
+		if(func == null) {
+			Msg.warn(server, "Failed to find a function by the address " + addr);;
 			return false;
+		}
 		
-		var v = getStackVariable(func, Integer.parseInt(offset));
-		if(v == null)
+		var v = getStackVariable(func, Integer.decode(offset));
+		if(v == null) {
+			Msg.warn(server, "Failed to find a stack var by the offset " + offset);
 			return false;
+		}
 		
 		
 		var transID = program.startTransaction("update stackvar type");
 		try {
 			v.setDataType(parsedType, false, true, SourceType.ANALYSIS);
 		} catch (Exception e) {
-			System.out.println("Failed in stackvar settype: " + e.toString());
+			Msg.warn(this, "Failed to do transaction on stackvar settype: " + e.toString());
 			return false;
 		} finally {
 			program.endTransaction(transID, true);
@@ -181,18 +192,22 @@ public class BSGhidraServerAPI {
 	public Boolean setStackVarName(String addr, String offset, String name) {
 		var program = this.server.plugin.getCurrentProgram();
 		var func = this.getNearestFunction(this.strToAddr(addr));
-		if(func == null)
+		if(func == null) {
+			Msg.warn(server, "Failed to find a function by the address " + addr);;
 			return false;
+		}
 		
-		var v = getStackVariable(func, Integer.parseInt(offset));
-		if(v == null)
+		var v = getStackVariable(func, Integer.decode(offset));
+		if(v == null) {
+			Msg.warn(server, "Failed to find a stack var by the offset " + offset);
 			return false;
+		}
 		
 		var transID = program.startTransaction("update stackvar name");
 		try {
 			v.setName(name, SourceType.ANALYSIS);
 		} catch (DuplicateNameException | InvalidInputException e) {
-			System.out.println("Failed in stackvar setname: " + e.toString());
+			Msg.warn(this, "Failed in stackvar setname: " + e.toString());
 			return false;
 		} finally {
 			program.endTransaction(transID, true);

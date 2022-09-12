@@ -10,6 +10,7 @@ import binsync.BinSyncPlugin;
 import binsync.BSGhidraServerAPI;
 import binsync.BSGhidraProcessorFactoryFactory;
 
+
 public class BSGhidraServer {
     public BinSyncPlugin plugin;
     public BSGhidraServerAPI api;
