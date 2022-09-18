@@ -6,6 +6,7 @@ import org.apache.xmlrpc.webserver.WebServer;
 
 import ghidra.program.database.function.FunctionManagerDB;
 import ghidra.program.model.listing.*;
+import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.symbol.*;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.InvalidInputException;
@@ -16,13 +17,19 @@ import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.services.DataTypeManagerService;
+import ghidra.app.services.GoToService;
 import ghidra.util.task.ConsoleTaskMonitor;
 import ghidra.program.database.function.LocalVariableDB;
 
+import ghidra.app.util.cparser.C.CParserUtils;
+import ghidra.framework.plugintool.ServiceProvider;
+import ghidra.program.model.data.DataTypeConflictHandler;
+import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.util.data.DataTypeParser; 
 import ghidra.util.data.DataTypeParser.AllowedDataTypes; 
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.util.Msg;
+import ghidra.app.script.GhidraScript;
 
 import binsync.BSGhidraServer;
 
@@ -106,6 +113,15 @@ public class BSGhidraServerAPI {
 		return parsedType;
 	}
 	
+	private FunctionDefinitionDataType parsePrototypeStr(String protoStr) 
+	{
+		// string must look something like:
+		// 'void function1(int p1, int p2)' 
+		var program = this.server.plugin.getCurrentProgram();
+		var funcDefn = CParserUtils.parseSignature((ServiceProvider) null, program, protoStr);
+		return funcDefn;
+	}
+	
 	/*
 	 * 
 	 * Decompiler API
@@ -114,6 +130,24 @@ public class BSGhidraServerAPI {
 	
 	public String context() {
 		return this.server.plugin.getProgramLocation().getAddress().toString();
+	}
+	
+	public String baseAddr() {
+		return this.server.plugin.getCurrentProgram().getImageBase().toString();
+	}
+	
+	public String binaryHash() {
+		return this.server.plugin.getCurrentProgram().getExecutableMD5();
+	}
+	
+	public String binaryPath() {
+		return this.server.plugin.getCurrentProgram().getExecutablePath();
+	}
+	
+	public Boolean gotoAddress(String addr) {
+		GoToService goToService = this.server.plugin.getTool().getService(GoToService.class);
+		goToService.goTo(this.strToAddr(addr));
+		return true;
 	}
 	
 	/*
@@ -142,6 +176,70 @@ public class BSGhidraServerAPI {
 		}
 		
 		return true;			
+	}
+	
+	public Boolean setFunctionRetType(String addr, String typeStr) {
+		var parsedType = parseTypeString(typeStr);
+		if(parsedType == null) {
+			Msg.warn(server, "Failed to parse type string!");;
+			return false;
+		}
+		
+		var program = this.server.plugin.getCurrentProgram();
+		var func = this.getNearestFunction(this.strToAddr(addr));
+		if(func == null) {
+			Msg.warn(server, "Failed to find a function by the address " + addr);;
+			return false;
+		}
+		
+		
+		var transID = program.startTransaction("update function ret type");
+		try {
+			func.setReturnType(parsedType, SourceType.ANALYSIS);
+		} catch (Exception e) {
+			Msg.warn(this, "Failed to do transaction on function settype: " + e.toString());
+			return false;
+		} finally {
+			program.endTransaction(transID, true);
+		}
+		
+		return true;	
+	}
+	
+	public Boolean setFunctionPrototype(String addr, String proto) {
+		// Useful code refrences:
+		// - https://github.com/NationalSecurityAgency/ghidra/blob/aa299897c6b84e16ecf228d82cf8957a9529b819/Ghidra/Features/Decompiler/src/main/java/ghidra/app/plugin/core/decompile/actions/OverridePrototypeAction.java#L271
+		// - https://github.com/NationalSecurityAgency/ghidra/blob/aa299897c6b84e16ecf228d82cf8957a9529b819/Ghidra/Features/Decompiler/src/main/java/ghidra/app/plugin/core/decompile/actions/RetypeLocalAction.java
+		//
+		// It may actually be impossible to rename or retype just a single param and get propogation without moidifying the signature
+		// directly... which sucks. The correct way to do this will be calling getFunctionPrototype(), replacing strings, and setting it back
+		// TODO: finish this function!
+		
+		var parsedProto = parsePrototypeStr(proto);
+		if(parsedProto == null) {
+			Msg.warn(server, "Failed to parse prototype string!");;
+			return false;
+		}
+		
+		var program = this.server.plugin.getCurrentProgram();
+		var parsedAddr = this.strToAddr(addr);
+		var func = this.getNearestFunction(parsedAddr);
+		if(func == null) {
+			Msg.warn(server, "Failed to find a function by the address " + addr);;
+			return false;
+		}
+		
+		var transID = program.startTransaction("update function prototype");
+		try {
+			HighFunctionDBUtil.writeOverride(func, parsedAddr, parsedProto);
+		} catch (Exception e) {
+			Msg.warn(this, "Failed to do transaction on function settype: " + e.toString());
+			return false;
+		} finally {
+			program.endTransaction(transID, true);
+		}
+		
+		return true;
 	}
 	
 	
@@ -213,11 +311,6 @@ public class BSGhidraServerAPI {
 			program.endTransaction(transID, true);
 		}
 		
-		/*
-		var decRes = this.decompile(func);
-		if(decRes == null)
-			return false;
-		*/
 		return true;
 	}
 	
