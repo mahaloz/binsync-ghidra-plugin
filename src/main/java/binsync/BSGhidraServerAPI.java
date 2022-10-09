@@ -1,5 +1,10 @@
 package binsync;
 
+import java.util.Dictionary;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Map;
+
 import org.apache.xmlrpc.XmlRpcException;
 import org.apache.xmlrpc.server.*;
 import org.apache.xmlrpc.webserver.WebServer;
@@ -30,6 +35,7 @@ import ghidra.util.data.DataTypeParser.AllowedDataTypes;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.util.Msg;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.cmd.comments.SetCommentCmd;
 
 import binsync.BSGhidraServer;
 
@@ -128,8 +134,21 @@ public class BSGhidraServerAPI {
 	 *
 	 */
 	
-	public String context() {
-		return this.server.plugin.getProgramLocation().getAddress().toString();
+	public Map<String, String> context() {
+		Map<String, String> retVal = new HashMap<>();
+		retVal.put("addr", "0x0");
+		retVal.put("name", "");
+		
+		
+		var currAddr = this.server.plugin.getProgramLocation().getAddress();
+		var func = this.getNearestFunction(currAddr);
+		if(func != null) {
+			retVal.put("name", func.getName());
+			currAddr = func.getEntryPoint();
+		}
+		
+		retVal.put("addr", currAddr.toString());
+		return retVal;
 	}
 	
 	public String baseAddr() {
@@ -165,7 +184,7 @@ public class BSGhidraServerAPI {
 		}
 		
 		
-		var transID = program.startTransaction("update function name");
+		var transID = program.startTransaction("bs-set-func-name");
 		try {
 			func.setName(name, SourceType.ANALYSIS);
 		} catch (DuplicateNameException | InvalidInputException e) {
@@ -193,7 +212,7 @@ public class BSGhidraServerAPI {
 		}
 		
 		
-		var transID = program.startTransaction("update function ret type");
+		var transID = program.startTransaction("bs-set-func-ret");
 		try {
 			func.setReturnType(parsedType, SourceType.ANALYSIS);
 		} catch (Exception e) {
@@ -229,7 +248,7 @@ public class BSGhidraServerAPI {
 			return false;
 		}
 		
-		var transID = program.startTransaction("update function prototype");
+		var transID = program.startTransaction("bs-set-func-proto");
 		try {
 			HighFunctionDBUtil.writeOverride(func, parsedAddr, parsedProto);
 		} catch (Exception e) {
@@ -247,6 +266,34 @@ public class BSGhidraServerAPI {
 	 * Comments
 	 * useful: https://github.com/HackOvert/GhidraSnippets
 	 */
+	
+	public Boolean setComment(String addr, String cmt, Boolean isDecompiled) {
+		var program = this.server.plugin.getCurrentProgram();
+		var address = this.strToAddr(addr);
+		if(address == null) {
+			Msg.warn(server, "Failed to parse address!");
+			return false;
+		}
+		
+		var cmtType = CodeUnit.EOL_COMMENT;
+		if(isDecompiled) {
+			cmtType = CodeUnit.PRE_COMMENT;
+		}
+		
+		Boolean success = false;
+		var transID = program.startTransaction("bs-set-cmt");
+		try {
+			var cmd = new SetCommentCmd(address, cmtType, cmt);
+			success = cmd.applyTo(program);
+		} catch (Exception e) {
+			Msg.warn(this, "Failed to do transaction on comment: " + e.toString());
+			return success;
+		} finally {
+			program.endTransaction(transID, true);
+		}
+		
+		return success;
+	}
 	
 	
 	/*
@@ -274,7 +321,7 @@ public class BSGhidraServerAPI {
 		}
 		
 		
-		var transID = program.startTransaction("update stackvar type");
+		var transID = program.startTransaction("bs-set-stackvar-type");
 		try {
 			v.setDataType(parsedType, false, true, SourceType.ANALYSIS);
 		} catch (Exception e) {
@@ -301,7 +348,7 @@ public class BSGhidraServerAPI {
 			return false;
 		}
 		
-		var transID = program.startTransaction("update stackvar name");
+		var transID = program.startTransaction("bs-set-stackvar-name");
 		try {
 			v.setName(name, SourceType.ANALYSIS);
 		} catch (DuplicateNameException | InvalidInputException e) {
