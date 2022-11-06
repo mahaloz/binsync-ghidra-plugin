@@ -95,6 +95,9 @@ public class BSGhidraServerAPI {
 	
 	private LocalVariableDB getStackVariable(Function func, int offset) {
 		for (Variable v : func.getAllVariables()) {
+			if(!v.isStackVariable())
+				continue;
+			
 			if(v.getStackOffset() == offset) {
 				return (LocalVariableDB) v;
 			}
@@ -365,6 +368,22 @@ public class BSGhidraServerAPI {
 	/*
 	 * Global Vars
 	 */
+	
+	/*
+	 * TODO:
+	 * Read this to recap on the progress of global vars:
+	 * - we have the dict for storing the cache, which we can get all symbols and their addrs
+	 * - FOR BINSYNC:
+	 * 	- we still need to get the type for each global var, as well as the size if possible
+	 * 	- currently we can get a reference to the global_label, but that gets us something 'undefined8' and such 
+	 * 	- need to find if we can convert those to the correct type 
+	var dm = this.server.plugin.getCurrentProgram().getDataTypeManager();
+	var lst = this.server.plugin.getCurrentProgram().getListing();
+	var data = lst.getDataAt(this.rebaseAddr(0xdead, false));
+	var dType = data.getDataType();
+	 */
+	// this code is for getting the type of a global variable ^^^
+		
 	
 	/*
 	 * Structs
