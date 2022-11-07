@@ -41,9 +41,6 @@ public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener
 	public BinSyncPlugin(PluginTool tool) {
 		super(tool, true, true);
 		
-		// BinSync UI runner path
-		binSyncUIPath = "/home/mahaloz/github/binsync/plugins/ghidra_binsync/ghidra_binsync.py";
-		
 		// API Server
 		server = new BSGhidraServer(6683, this);
 		
@@ -126,7 +123,7 @@ public class BinSyncPlugin extends ProgramPlugin implements DomainObjectListener
 	private Boolean startBinSyncUI() {
 		try {
 			Process process = new ProcessBuilder(
-					"python3", "-m", "binsync", "-p", "ghidra"
+					"python3", "-m", "binsync", "--run-plugin", "ghidra"
 			).start();
 		}
 		catch (Exception e) {
